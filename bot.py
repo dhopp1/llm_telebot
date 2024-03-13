@@ -96,7 +96,7 @@ def send_welcome(message):
         bot.reply_to(
             message,
             f"""Successfully initialized! You are chatting with '{which_llm}', not contextualized. 
-Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}
+Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}.
 If you want to include source documents in responses, write 'cite your sources' anywhere in the same message as your query. 
 If you want to change the model and context, send a message in exactly this format: "[reinitialize]{{'new_llm':'llama-2-7b', 'new_corpus':'imf'}}"
 The options for 'new_llm' are one of: {list(llm_dict.name)}
@@ -172,7 +172,7 @@ def echo_all(message):
         )
 
         response_message = (
-            f"Successfully initialized! You are chatting with '{which_llm}' contextualized on the '{which_corpus}' corpus. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}"
+            f"Successfully initialized! You are chatting with '{which_llm}' contextualized on the '{which_corpus}' corpus. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}"
             if new_corpus is not None
             else f"Successfully initialized! You are chatting with '{which_llm}', not contextualized. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}"
         )
