@@ -1,0 +1,4 @@
+name,llm_url,llm_path
+llama-2-7b,https://huggingface.co/TheBloke/Llama-2-7B-Chat-GGUF/resolve/main/llama-2-7b-chat.Q4_K_M.gguf,models/llama-2-7b-chat.Q4_K_M.gguf
+llama-2-13b,https://huggingface.co/TheBloke/Llama-2-13B-chat-GGUF/resolve/main/llama-2-13b-chat.Q4_0.gguf,models/llama-2-13b-chat.Q4_0.gguf
+mistral-7b,https://huggingface.co/TheBloke/Mistral-7B-v0.1-GGUF/resolve/main/mistral-7b-v0.1.Q4_0.gguf,models/mistral-7b-v0.1.Q4_0.gguf
