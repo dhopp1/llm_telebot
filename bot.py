@@ -25,8 +25,10 @@ n_gpu_layers = 100
 temperature = 0.0
 max_new_tokens = 512
 context_window = 3900
+chunk_overlap = 200
 chunk_size = 512
-
+paragraph_separator = "\n\n\n"
+separator = " "
 
 def initialize(
     which_llm_local,
@@ -35,7 +37,10 @@ def initialize(
     temperature=0.0,
     max_new_tokens=512,
     context_window=3900,
+    chunk_overlap=200,
     chunk_size=512,
+    paragraph_separator="\n\n\n",
+    separator=" ",
 ):
     text_path = (
         corpora_dict.loc[lambda x: x.name == which_corpus_local, "text_path"].values[0]
@@ -72,7 +77,12 @@ def initialize(
             table_name=which_corpus_local,
         )
 
-        model.populate_db(chunk_size=chunk_size)
+        model.populate_db(
+            chunk_overlap=chunk_overlap,
+            chunk_size=chunk_size,
+            paragraph_separator=paragraph_separator,
+            separator=separator,
+        )
     return model, which_llm_local, which_corpus_local
 
 
@@ -94,13 +104,16 @@ def send_welcome(message):
                 temperature=temperature,
                 max_new_tokens=max_new_tokens,
                 context_window=context_window,
+                chunk_overlap=chunk_overlap,
                 chunk_size=chunk_size,
+                paragraph_separator=paragraph_separator,
+                separator=separator,
             )
         contextualized_section = " contextualized on the '{which_corpus}' corpus" if which_corpus is not None else ", not contextualized"
         bot.reply_to(
             message,
             f"""Successfully initialized! You are chatting with '{which_llm}'{contextualized_section}. 
-Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}, chunk_size = {chunk_size}.
+Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}, chunk_overlap = {chunk_overlap}, chunk_size = {chunk_size}, paragraph_separator = {paragraph_separator.encode('unicode_escape').decode('utf-8')}, separator = {separator.encode('unicode_escape').decode('utf-8')}.
 If you want to include source documents in responses, write 'cite your sources' anywhere in the same message as your query. 
 If you want to change the model and context, send a message in exactly this format: "[reinitialize]{{'new_llm':'llama-2-7b', 'new_corpus':'imf'}}"
 The options for 'new_llm' are one of: {list(llm_dict.name)}
@@ -138,7 +151,10 @@ def echo_all(message):
         global temperature
         global max_new_tokens
         global context_window
+        global chunk_overlap
         global chunk_size
+        global paragraph_separator
+        global separator
         global which_llm
 
         similarity_top_k = (
@@ -166,10 +182,25 @@ def echo_all(message):
             if "context_window" in param_dict.keys()
             else context_window
         )
+        chunk_overlap = (
+            param_dict["chunk_overlap"]
+            if "chunk_overlap" in param_dict.keys()
+            else chunk_overlap
+        )
         chunk_size = (
             param_dict["chunk_size"]
             if "chunk_size" in param_dict.keys()
             else chunk_size
+        )
+        paragraph_separator = (
+            param_dict["paragraph_separator"]
+            if "paragraph_separator" in param_dict.keys()
+            else paragraph_separator
+        )
+        separator = (
+            param_dict["separator"]
+            if "separator" in param_dict.keys()
+            else separator
         )
 
         model, which_llm, which_corpus = initialize(
@@ -179,13 +210,16 @@ def echo_all(message):
             temperature=temperature,
             max_new_tokens=max_new_tokens,
             context_window=context_window,
+            chunk_overlap=chunk_overlap,
             chunk_size=chunk_size,
+            paragraph_separator=paragraph_separator,
+            separator=separator,
         )
 
         response_message = (
-            f"Successfully initialized! You are chatting with '{which_llm}' contextualized on the '{which_corpus}' corpus. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}, chunk_size = {chunk_size}"
+            f"Successfully initialized! You are chatting with '{which_llm}' contextualized on the '{which_corpus}' corpus. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}, chunk_overlap = {chunk_overlap}, chunk_size = {chunk_size}, paragraph_separator = {paragraph_separator.encode('unicode_escape').decode('utf-8')}, separator = {separator.encode('unicode_escape').decode('utf-8')}"
             if new_corpus is not None
-            else f"Successfully initialized! You are chatting with '{which_llm}', not contextualized. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, chunk_size = {chunk_size}"
+            else f"Successfully initialized! You are chatting with '{which_llm}', not contextualized. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, chunk_overlap = {chunk_overlap}, chunk_size = {chunk_size}, paragraph_separator = {paragraph_separator.encode('unicode_escape').decode('utf-8')}, separator = {separator.encode('unicode_escape').decode('utf-8')}"
         )
         bot.send_message(message.chat.id, text=response_message)
     else:
