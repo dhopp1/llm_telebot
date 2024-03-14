@@ -27,8 +27,12 @@ max_new_tokens = 512
 context_window = 3900
 chunk_overlap = 200
 chunk_size = 512
+memory_limit = 1500
+system_prompt = ""
 paragraph_separator = "\n\n\n"
 separator = " "
+use_chat_engine = True
+reset_chat_engine = False
 
 def initialize(
     which_llm_local,
@@ -41,6 +45,8 @@ def initialize(
     chunk_size=512,
     paragraph_separator="\n\n\n",
     separator=" ",
+    memory_limit=2048,
+    system_prompt="",
 ):
     text_path = (
         corpora_dict.loc[lambda x: x.name == which_corpus_local, "text_path"].values[0]
@@ -68,6 +74,8 @@ def initialize(
         temperature=temperature,
         max_new_tokens=max_new_tokens,
         context_window=context_window,
+        memory_limit=memory_limit,
+        system_prompt=system_prompt,
     )
 
     if which_corpus_local is not None:
@@ -118,6 +126,7 @@ If you want to include source documents in responses, write 'cite your sources' 
 If you want to change the model and context, send a message in exactly this format: "[reinitialize]{{'new_llm':'llama-2-7b', 'new_corpus':'imf'}}"
 The options for 'new_llm' are one of: {list(llm_dict.name)}
 The options for 'new_corpus' are one of: {list(corpora_dict.name)}', or put None (no quotes) for non-RAG base model
+To reset your chat's short-term memory/context, send a message containing only the word 'reset'
             """,
         )
     else:
@@ -223,37 +232,45 @@ def echo_all(message):
         )
         bot.send_message(message.chat.id, text=response_message)
     else:
-        bot.send_message(
-            message.chat.id,
-            text=f"Thinking (model = '{which_llm}', corpus = '{which_corpus}')...",
-        )
-
-        try:
-            response = model.gen_response(
-                message.text.replace("cite your sources", ""),
-                similarity_top_k=similarity_top_k,
+        # reset context
+        if message.text == "reset":
+            model.chat_engine.reset()
+            bot.send_message(
+                message.chat.id,
+                text="Short-term memory reset!",
             )
-            # in case non-RAG
-            if type(response) is not dict:
-                response = {"response": response}
-            bot.reply_to(message, response["response"])
-
-            if "cite your sources" in message.text:
-                bot.send_message(
-                    message.chat.id, "These are the documents the reply is based on:"
+        # answer prompt
+        else:
+            bot.send_message(
+                message.chat.id,
+                text=f"Thinking (model = '{which_llm}', corpus = '{which_corpus}')...",
+            )
+    
+            try:
+                response = model.gen_response(
+                    message.text.replace("cite your sources", ""),
+                    similarity_top_k=similarity_top_k,
+                    use_chat_engine=use_chat_engine,
+                    reset_chat_engine=reset_chat_engine
                 )
-
-                for j in list(
-                    pd.Series(list(response.keys()))[
-                        pd.Series(list(response.keys())) != "response"
-                    ]
-                ):
-                    bot.send_message(message.chat.id, f"{j}: " + response[j])
-        except:
-            bot.reply_to(
-                message,
-                "Context too large, try reformulating or shortening your question and asking again.",
-            )
+                bot.reply_to(message, response["response"])
+    
+                if "cite your sources" in message.text:
+                    bot.send_message(
+                        message.chat.id, "These are the documents the reply is based on:"
+                    )
+    
+                    for j in list(
+                        pd.Series(list(response.keys()))[
+                            pd.Series(list(response.keys())) != "response"
+                        ]
+                    ):
+                        bot.send_message(message.chat.id, f"{j}: " + response[j])
+            except:
+                bot.reply_to(
+                    message,
+                    "Context too large, try reformulating or shortening your question and asking again.",
+                )
 
 
 bot.infinity_polling()
