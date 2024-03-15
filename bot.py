@@ -33,6 +33,8 @@ paragraph_separator = "\n\n\n"
 separator = " "
 use_chat_engine = True
 reset_chat_engine = False
+db_name = "vector_db"
+rerun_populate_db = False
 
 def initialize(
     which_llm_local,
@@ -47,6 +49,7 @@ def initialize(
     separator=" ",
     memory_limit=2048,
     system_prompt="",
+    rerun_populate_db=False,
 ):
     text_path = (
         corpora_dict.loc[lambda x: x.name == which_corpus_local, "text_path"].values[0]
@@ -79,18 +82,32 @@ def initialize(
     )
 
     if which_corpus_local is not None:
+        if rerun_populate_db:
+            clear_table = True
+        else:
+            clear_table = False
+        
         model.setup_db(
+            db_name=db_name,
             user=db_info.loc[0, "user"],
             password=db_info.loc[0, "password"],
             table_name=which_corpus_local,
+            clear_database=False,
+            clear_table=clear_table,
         )
+        
+        # check if table exists
+        with model.db_connection.cursor() as c:
+            c.execute(f"SELECT EXISTS(SELECT * FROM information_schema.tables WHERE table_name='data_{which_corpus_local}')")
+            table_exists = c.fetchone()[0]
 
-        model.populate_db(
-            chunk_overlap=chunk_overlap,
-            chunk_size=chunk_size,
-            paragraph_separator=paragraph_separator,
-            separator=separator,
-        )
+        if rerun_populate_db or not(table_exists):
+            model.populate_db(
+                chunk_overlap=chunk_overlap,
+                chunk_size=chunk_size,
+                paragraph_separator=paragraph_separator,
+                separator=separator,
+            )
     return model, which_llm_local, which_corpus_local
 
 
@@ -116,8 +133,10 @@ def send_welcome(message):
                 chunk_size=chunk_size,
                 paragraph_separator=paragraph_separator,
                 separator=separator,
+                system_prompt=system_prompt,
+                rerun_populate_db=rerun_populate_db,
             )
-        contextualized_section = " contextualized on the '{which_corpus}' corpus" if which_corpus is not None else ", not contextualized"
+        contextualized_section = f" contextualized on the '{which_corpus}' corpus" if which_corpus is not None else ", not contextualized"
         bot.reply_to(
             message,
             f"""Successfully initialized! You are chatting with '{which_llm}'{contextualized_section}. 
@@ -165,6 +184,8 @@ def echo_all(message):
         global paragraph_separator
         global separator
         global which_llm
+        global rerun_populate_db
+
 
         similarity_top_k = (
             param_dict["similarity_top_k"]
@@ -211,6 +232,10 @@ def echo_all(message):
             if "separator" in param_dict.keys()
             else separator
         )
+        
+        # certain parameters require rebuilding of the vector db
+        if any(i in param_dict.keys() for i in ["chunk_overlap", "chunk_size", "paragraph_separator", "separator"]):
+            rerun_populate_db = True
 
         model, which_llm, which_corpus = initialize(
             which_llm_local=new_llm,
@@ -223,7 +248,11 @@ def echo_all(message):
             chunk_size=chunk_size,
             paragraph_separator=paragraph_separator,
             separator=separator,
+            system_prompt=system_prompt,
+            rerun_populate_db=rerun_populate_db,
         )
+        
+        rerun_populate_db = False
 
         response_message = (
             f"Successfully initialized! You are chatting with '{which_llm}' contextualized on the '{which_corpus}' corpus. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}, chunk_overlap = {chunk_overlap}, chunk_size = {chunk_size}, paragraph_separator = {paragraph_separator.encode('unicode_escape').decode('utf-8')}, separator = {separator.encode('unicode_escape').decode('utf-8')}"
