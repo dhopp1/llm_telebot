@@ -1,4 +1,5 @@
 local_rag_llm
 pandas
 telebot
+#zipfile, only if you want to upload your own documents via Telegram
 #nlp_pipeline, only if you want to upload your own documents via Telegram

@@ -163,7 +163,7 @@ The options for 'new_corpus' are one of: {list(corpora_dict.name)}', or put None
 
 To reset your chat's short-term memory/context, send a message containing only the word 'reset'
 
-To upload your own corpus, either upload a single "metadata.csv" file, with at least one column named 'text_id', counting up from 1, 2, etc., and one named 'web_filepath' with the web addresses of the .html or .pdf documents, or upload a .zip file that contains a folder named 'corpus' with the .doc, .docx, .txt, or .pdf files inside. You can optionally include a 'metadata.csv' file in the zip file at the same level as the 'corpus' folder, with at least a column named 'filename' with the names of the files.
+To upload your own corpus, either upload a single "metadata.csv" file, with at least one column named 'web_filepath' with the web addresses of the .html or .pdf documents, or upload a .zip file that contains a folder named 'corpus' with the .doc, .docx, .txt, or .pdf files inside. You can optionally include a 'metadata.csv' file in the zip file at the same level as the 'corpus' folder, with at least a column named 'filename' with the names of the files.
             """,
         )
     else:
@@ -190,7 +190,7 @@ def echo_all(message):
     
     # upload of own corpus
     if message.document is not None:
-        try:
+        if True:
             from helper.own_corpus import process_corpus
             
             if message.caption is None:
@@ -231,9 +231,9 @@ def echo_all(message):
                 
                 bot.send_message(
                     message.chat.id,
-                    text=f"Successfully created corpus '{corpus_name}', you are chatting with {which_llm} contextualized on the '{which_corpus}' corpus. If the corpus name is 'temporary', it will be written over the next time someone uploads a corpus.",
+                    text=f"Successfully created corpus '{corpus_name}', you are chatting with '{which_llm}' contextualized on the '{which_corpus}' corpus. If the corpus name is 'temporary', it will be written over the next time someone uploads a corpus.",
                 )
-        except:
+        else:
             bot.send_message(
                 message.chat.id,
                 text="An error was encountered, there may be an issue with one of your documents or URLs",
