@@ -155,8 +155,18 @@ To reset your chat's short-term memory/context, send a message containing only t
 # bot
 @bot.message_handler(func=lambda msg: True)
 def echo_all(message):
+    # check for clearing out the model
+    if message.text.lower() == "clear":
+        global model
+        global which_corpus
+        if which_corpus is not None:
+            model.close_connection()
+        del model.llm
+        del model
+        gc.collect()
+        
     # check for reinitialization
-    if "[reinitialize]" in message.text:
+    elif "[reinitialize]" in message.text:
         # kill the existing conncection
         global model
         global which_corpus
@@ -262,7 +272,7 @@ def echo_all(message):
         bot.send_message(message.chat.id, text=response_message)
     else:
         # reset context
-        if message.text == "reset":
+        if message.text.lower() == "reset":
             model.chat_engine.reset()
             bot.send_message(
                 message.chat.id,
@@ -277,14 +287,14 @@ def echo_all(message):
     
             try:
                 response = model.gen_response(
-                    message.text.replace("cite your sources", ""),
+                    message.text.replace("cite your sources", "").replace("Cite your sources", ""),
                     similarity_top_k=similarity_top_k,
                     use_chat_engine=use_chat_engine,
                     reset_chat_engine=reset_chat_engine
                 )
                 bot.reply_to(message, response["response"])
     
-                if "cite your sources" in message.text:
+                if "cite your sources" in message.text.lower():
                     bot.send_message(
                         message.chat.id, "These are the documents the reply is based on:"
                     )
