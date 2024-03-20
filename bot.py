@@ -150,13 +150,20 @@ def send_welcome(message):
         bot.reply_to(
             message,
             f"""Successfully initialized! You are chatting with '{which_llm}'{contextualized_section}. 
+
 Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}, chunk_overlap = {chunk_overlap}, chunk_size = {chunk_size}, paragraph_separator = {paragraph_separator.encode('unicode_escape').decode('utf-8')}, separator = {separator.encode('unicode_escape').decode('utf-8')}.
+
 If you want to include source documents in responses, write 'cite your sources' anywhere in the same message as your query. 
+
 If you want to change the model and context, send a message in exactly this format: "[reinitialize]{{'new_llm':'llama-2-7b', 'new_corpus':'imf'}}"
+
 The options for 'new_llm' are one of: {list(llm_dict.name)}
+
 The options for 'new_corpus' are one of: {list(corpora_dict.name)}', or put None (no quotes) for non-RAG base model
+
 To reset your chat's short-term memory/context, send a message containing only the word 'reset'
-To upload your own corpus, either upload a single "metadata.csv" file, with at least one column named 'web_filepath' with the web addresses of the .html or .pdf documents, or upload a .zip file that contains a folder named 'corpus' with the .doc, .docx, .txt, or .pdf files inside. You can optionally include a 'metadata.csv' file in the zip file at the same level as the 'corpus' folder, with at least a column named 'filename' with the names of the files.
+
+To upload your own corpus, either upload a single "metadata.csv" file, with at least one column named 'text_id', counting up from 1, 2, etc., and one named 'web_filepath' with the web addresses of the .html or .pdf documents, or upload a .zip file that contains a folder named 'corpus' with the .doc, .docx, .txt, or .pdf files inside. You can optionally include a 'metadata.csv' file in the zip file at the same level as the 'corpus' folder, with at least a column named 'filename' with the names of the files.
             """,
         )
     else:
@@ -183,47 +190,53 @@ def echo_all(message):
     
     # upload of own corpus
     if message.document is not None:
-        from helper.own_corpus import process_corpus
-        
-        if message.caption is None:
-            corpus_name = "temporary"
-        else:
-            corpus_name = message.caption
-        
-        # duplicate corpus name
-        if not((corpus_name == "temporary") or (corpus_name not in list(corpora_dict.name.values))):
+        try:
+            from helper.own_corpus import process_corpus
+            
+            if message.caption is None:
+                corpus_name = "temporary"
+            else:
+                corpus_name = message.caption
+            
+            # duplicate corpus name
+            if not((corpus_name == "temporary") or (corpus_name not in list(corpora_dict.name.values))):
+                bot.send_message(
+                    message.chat.id,
+                    text="A corpus already exists with that name, choose a different one.",
+                )
+            else:
+                bot.send_message(
+                    message.chat.id,
+                    text="Processing the corpus, this may take a few minutes...",
+                )
+                
+                corpora_dict = process_corpus(bot, corpus_name, message.document)
+                
+                model, which_llm, which_corpus = initialize(
+                    which_llm_local=llm_dict.loc[2, "name"], # mistral-docsgpt by default
+                    which_corpus_local=corpus_name,
+                    n_gpu_layers=n_gpu_layers,
+                    temperature=temperature,
+                    max_new_tokens=max_new_tokens,
+                    context_window=context_window,
+                    chunk_overlap=chunk_overlap,
+                    chunk_size=chunk_size,
+                    paragraph_separator="\n\n\n",
+                    separator=" ",
+                    memory_limit=memory_limit,
+                    system_prompt="",
+                    rerun_populate_db=True,
+                    clear_database_local=True,
+                )
+                
+                bot.send_message(
+                    message.chat.id,
+                    text=f"Successfully created corpus '{corpus_name}', you are chatting with {which_llm} contextualized on the '{which_corpus}' corpus. If the corpus name is 'temporary', it will be written over the next time someone uploads a corpus.",
+                )
+        except:
             bot.send_message(
                 message.chat.id,
-                text="A corpus already exists with that name, choose a different one.",
-            )
-        else:
-            bot.send_message(
-                message.chat.id,
-                text="Processing the corpus, this may take a few minutes...",
-            )
-            
-            corpora_dict = process_corpus(bot, corpus_name, message.document)
-            
-            model, which_llm, which_corpus = initialize(
-                which_llm_local=llm_dict.loc[2, "name"], # mistral-docsgpt by default
-                which_corpus_local=corpus_name,
-                n_gpu_layers=n_gpu_layers,
-                temperature=temperature,
-                max_new_tokens=max_new_tokens,
-                context_window=context_window,
-                chunk_overlap=chunk_overlap,
-                chunk_size=chunk_size,
-                paragraph_separator="\n\n\n",
-                separator=" ",
-                memory_limit=memory_limit,
-                system_prompt="",
-                rerun_populate_db=True,
-                clear_database_local=True,
-            )
-            
-            bot.send_message(
-                message.chat.id,
-                text=f"Successfully created corpus '{corpus_name}', you are chatting with {which_llm} contextualized on the '{which_corpus}' corpus. If the corpus name is 'temporary', it will be written over the next time someone uploads a corpus.",
+                text="An error was encountered, there may be an issue with one of your documents or URLs",
             )
         
     # normal reply
