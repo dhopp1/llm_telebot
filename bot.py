@@ -35,6 +35,7 @@ use_chat_engine = True
 reset_chat_engine = False
 db_name = "vector_db"
 rerun_populate_db = False
+clear_database = False
 
 def initialize(
     which_llm_local,
@@ -50,12 +51,21 @@ def initialize(
     memory_limit=2048,
     system_prompt="",
     rerun_populate_db=False,
+    clear_database_local=False,
 ):
     text_path = (
         corpora_dict.loc[lambda x: x.name == which_corpus_local, "text_path"].values[0]
         if which_corpus_local is not None
         else None
     )
+    
+    # remove any non-text files in text path on Mac
+    if text_path is not None:
+        files = os.listdir(text_path)
+        for item in files:
+            if not(item.endswith(".txt")):
+                os.remove(os.path.join(text_path, item))
+    
     metadata_path = (
         corpora_dict.loc[
             lambda x: x.name == which_corpus_local, "metadata_path"
@@ -92,7 +102,7 @@ def initialize(
             user=db_info.loc[0, "user"],
             password=db_info.loc[0, "password"],
             table_name=which_corpus_local,
-            clear_database=False,
+            clear_database=clear_database_local,
             clear_table=clear_table,
         )
         
@@ -146,6 +156,7 @@ If you want to change the model and context, send a message in exactly this form
 The options for 'new_llm' are one of: {list(llm_dict.name)}
 The options for 'new_corpus' are one of: {list(corpora_dict.name)}', or put None (no quotes) for non-RAG base model
 To reset your chat's short-term memory/context, send a message containing only the word 'reset'
+To upload your own corpus, either upload a single "metadata.csv" file, with at least one column named 'web_filepath' with the web addresses of the .html or .pdf documents, or upload a .zip file that contains a folder named 'corpus' with the .doc, .docx, .txt, or .pdf files inside. You can optionally include a 'metadata.csv' file in the zip file at the same level as the 'corpus' folder, with at least a column named 'filename' with the names of the files.
             """,
         )
     else:
@@ -153,169 +164,215 @@ To reset your chat's short-term memory/context, send a message containing only t
 
 
 # bot
-@bot.message_handler(func=lambda msg: True)
+@bot.message_handler(func=lambda msg: True, content_types = ["document", "text"])
 def echo_all(message):
     global model
     global which_corpus
-
-    # check for clearing out the model
-    if message.text.lower() == "clear":
-        if 'model' in globals():
-            if which_corpus is not None:
-                model.close_connection()
-            del model.llm
-            del model
-            gc.collect()
-            
-        bot.send_message(
-            message.chat.id,
-            text="Model cleared from memory!",
-        )
+    global similarity_top_k
+    global n_gpu_layers
+    global temperature
+    global max_new_tokens
+    global context_window
+    global chunk_overlap
+    global chunk_size
+    global paragraph_separator
+    global separator
+    global which_llm
+    global rerun_populate_db
+    global corpora_dict
+    
+    # upload of own corpus
+    if message.document is not None:
+        from helper.own_corpus import process_corpus
         
-    # check for reinitialization
-    elif "[reinitialize]" in message.text:
-        # kill the existing conncection
-        if 'model' in globals():
-            if which_corpus is not None:
-                model.close_connection()
-            del model.llm
-            gc.collect()
-
-        # params of the new model
-        param_dict = eval(message.text.split("]")[1])
-        new_corpus = param_dict["new_corpus"]
-        new_llm = param_dict["new_llm"]
-        bot.send_message(
-            message.chat.id,
-            text=f"Reinitializing the '{new_llm}' model on the '{new_corpus}' corpus, this may take a few minutes...",
-        )
-
-        global similarity_top_k
-        global n_gpu_layers
-        global temperature
-        global max_new_tokens
-        global context_window
-        global chunk_overlap
-        global chunk_size
-        global paragraph_separator
-        global separator
-        global which_llm
-        global rerun_populate_db
-
-
-        similarity_top_k = (
-            param_dict["similarity_top_k"]
-            if "similarity_top_k" in param_dict.keys()
-            else similarity_top_k
-        )
-        n_gpu_layers = (
-            param_dict["n_gpu_layers"]
-            if "n_gpu_layers" in param_dict.keys()
-            else n_gpu_layers
-        )
-        temperature = (
-            param_dict["temperature"]
-            if "temperature" in param_dict.keys()
-            else temperature
-        )
-        max_new_tokens = (
-            param_dict["max_new_tokens"]
-            if "max_new_tokens" in param_dict.keys()
-            else max_new_tokens
-        )
-        context_window = (
-            param_dict["context_window"]
-            if "context_window" in param_dict.keys()
-            else context_window
-        )
-        chunk_overlap = (
-            param_dict["chunk_overlap"]
-            if "chunk_overlap" in param_dict.keys()
-            else chunk_overlap
-        )
-        chunk_size = (
-            param_dict["chunk_size"]
-            if "chunk_size" in param_dict.keys()
-            else chunk_size
-        )
-        paragraph_separator = (
-            param_dict["paragraph_separator"]
-            if "paragraph_separator" in param_dict.keys()
-            else paragraph_separator
-        )
-        separator = (
-            param_dict["separator"]
-            if "separator" in param_dict.keys()
-            else separator
-        )
+        if message.caption is None:
+            corpus_name = "temporary"
+        else:
+            corpus_name = message.caption
         
-        # certain parameters require rebuilding of the vector db
-        if any(i in param_dict.keys() for i in ["chunk_overlap", "chunk_size", "paragraph_separator", "separator"]):
-            rerun_populate_db = True
-
-        model, which_llm, which_corpus = initialize(
-            which_llm_local=new_llm,
-            which_corpus_local=new_corpus,
-            n_gpu_layers=n_gpu_layers,
-            temperature=temperature,
-            max_new_tokens=max_new_tokens,
-            context_window=context_window,
-            chunk_overlap=chunk_overlap,
-            chunk_size=chunk_size,
-            paragraph_separator=paragraph_separator,
-            separator=separator,
-            system_prompt=system_prompt,
-            rerun_populate_db=rerun_populate_db,
-        )
-        
-        rerun_populate_db = False
-
-        response_message = (
-            f"Successfully initialized! You are chatting with '{which_llm}' contextualized on the '{which_corpus}' corpus. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}, chunk_overlap = {chunk_overlap}, chunk_size = {chunk_size}, paragraph_separator = {paragraph_separator.encode('unicode_escape').decode('utf-8')}, separator = {separator.encode('unicode_escape').decode('utf-8')}"
-            if new_corpus is not None
-            else f"Successfully initialized! You are chatting with '{which_llm}', not contextualized. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, chunk_overlap = {chunk_overlap}, chunk_size = {chunk_size}, paragraph_separator = {paragraph_separator.encode('unicode_escape').decode('utf-8')}, separator = {separator.encode('unicode_escape').decode('utf-8')}"
-        )
-        bot.send_message(message.chat.id, text=response_message)
-    else:
-        # reset context
-        if message.text.lower() == "reset":
-            model.chat_engine.reset()
+        # duplicate corpus name
+        if not((corpus_name == "temporary") or (corpus_name not in list(corpora_dict.name.values))):
             bot.send_message(
                 message.chat.id,
-                text="Short-term memory reset!",
+                text="A corpus already exists with that name, choose a different one.",
             )
-        # answer prompt
         else:
             bot.send_message(
                 message.chat.id,
-                text=f"Thinking (model = '{which_llm}', corpus = '{which_corpus}')...",
+                text="Processing the corpus, this may take a few minutes...",
+            )
+            
+            corpora_dict = process_corpus(bot, corpus_name, message.document)
+            
+            model, which_llm, which_corpus = initialize(
+                which_llm_local=llm_dict.loc[2, "name"], # mistral-docsgpt by default
+                which_corpus_local=corpus_name,
+                n_gpu_layers=n_gpu_layers,
+                temperature=temperature,
+                max_new_tokens=max_new_tokens,
+                context_window=context_window,
+                chunk_overlap=chunk_overlap,
+                chunk_size=chunk_size,
+                paragraph_separator="\n\n\n",
+                separator=" ",
+                memory_limit=memory_limit,
+                system_prompt="",
+                rerun_populate_db=True,
+                clear_database_local=True,
+            )
+            
+            bot.send_message(
+                message.chat.id,
+                text=f"Successfully created corpus '{corpus_name}', you are chatting with {which_llm} contextualized on the '{which_corpus}' corpus. If the corpus name is 'temporary', it will be written over the next time someone uploads a corpus.",
+            )
+        
+    # normal reply
+    else:
+        # check for clearing out the model
+        if message.text.lower() == "clear":
+            if 'model' in globals():
+                if which_corpus is not None:
+                    model.close_connection()
+                del model.llm
+                del model
+                gc.collect()
+                
+            bot.send_message(
+                message.chat.id,
+                text="Model cleared from memory!",
+            )
+            
+        # check for reinitialization
+        elif "[reinitialize]" in message.text:
+            # kill the existing conncection
+            if 'model' in globals():
+                if which_corpus is not None:
+                    model.close_connection()
+                del model.llm
+                gc.collect()
+    
+            # params of the new model
+            param_dict = eval(message.text.split("]")[1])
+            new_corpus = param_dict["new_corpus"]
+            new_llm = param_dict["new_llm"]
+            bot.send_message(
+                message.chat.id,
+                text=f"Reinitializing the '{new_llm}' model on the '{new_corpus}' corpus, this may take a few minutes...",
             )
     
-            try:
-                response = model.gen_response(
-                    message.text.replace("cite your sources", "").replace("Cite your sources", ""),
-                    similarity_top_k=similarity_top_k,
-                    use_chat_engine=use_chat_engine,
-                    reset_chat_engine=reset_chat_engine
-                )
-                bot.reply_to(message, response["response"])
+            similarity_top_k = (
+                param_dict["similarity_top_k"]
+                if "similarity_top_k" in param_dict.keys()
+                else similarity_top_k
+            )
+            n_gpu_layers = (
+                param_dict["n_gpu_layers"]
+                if "n_gpu_layers" in param_dict.keys()
+                else n_gpu_layers
+            )
+            temperature = (
+                param_dict["temperature"]
+                if "temperature" in param_dict.keys()
+                else temperature
+            )
+            max_new_tokens = (
+                param_dict["max_new_tokens"]
+                if "max_new_tokens" in param_dict.keys()
+                else max_new_tokens
+            )
+            context_window = (
+                param_dict["context_window"]
+                if "context_window" in param_dict.keys()
+                else context_window
+            )
+            chunk_overlap = (
+                param_dict["chunk_overlap"]
+                if "chunk_overlap" in param_dict.keys()
+                else chunk_overlap
+            )
+            chunk_size = (
+                param_dict["chunk_size"]
+                if "chunk_size" in param_dict.keys()
+                else chunk_size
+            )
+            paragraph_separator = (
+                param_dict["paragraph_separator"]
+                if "paragraph_separator" in param_dict.keys()
+                else paragraph_separator
+            )
+            separator = (
+                param_dict["separator"]
+                if "separator" in param_dict.keys()
+                else separator
+            )
+            
+            # certain parameters require rebuilding of the vector db
+            if any(i in param_dict.keys() for i in ["chunk_overlap", "chunk_size", "paragraph_separator", "separator"]):
+                rerun_populate_db = True
     
-                if "cite your sources" in message.text.lower():
-                    bot.send_message(
-                        message.chat.id, "These are the documents the reply is based on:"
+            model, which_llm, which_corpus = initialize(
+                which_llm_local=new_llm,
+                which_corpus_local=new_corpus,
+                n_gpu_layers=n_gpu_layers,
+                temperature=temperature,
+                max_new_tokens=max_new_tokens,
+                context_window=context_window,
+                chunk_overlap=chunk_overlap,
+                chunk_size=chunk_size,
+                paragraph_separator=paragraph_separator,
+                separator=separator,
+                system_prompt=system_prompt,
+                rerun_populate_db=rerun_populate_db,
+            )
+            
+            rerun_populate_db = False
+    
+            response_message = (
+                f"Successfully initialized! You are chatting with '{which_llm}' contextualized on the '{which_corpus}' corpus. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, similarity_top_k = {similarity_top_k}, chunk_overlap = {chunk_overlap}, chunk_size = {chunk_size}, paragraph_separator = {paragraph_separator.encode('unicode_escape').decode('utf-8')}, separator = {separator.encode('unicode_escape').decode('utf-8')}"
+                if new_corpus is not None
+                else f"Successfully initialized! You are chatting with '{which_llm}', not contextualized. Model parameters are: n_gpu_layers = {n_gpu_layers}, temperature = {temperature}, max_new_tokens = {max_new_tokens}, context_window = {context_window}, chunk_overlap = {chunk_overlap}, chunk_size = {chunk_size}, paragraph_separator = {paragraph_separator.encode('unicode_escape').decode('utf-8')}, separator = {separator.encode('unicode_escape').decode('utf-8')}"
+            )
+            bot.send_message(message.chat.id, text=response_message)
+        else:
+            # reset context
+            if message.text.lower() == "reset":
+                model.chat_engine.reset()
+                bot.send_message(
+                    message.chat.id,
+                    text="Short-term memory reset!",
+                )
+            # answer prompt
+            else:
+                bot.send_message(
+                    message.chat.id,
+                    text=f"Thinking (model = '{which_llm}', corpus = '{which_corpus}')...",
+                )
+        
+                try:
+                    response = model.gen_response(
+                        message.text.replace("cite your sources", "").replace("Cite your sources", ""),
+                        similarity_top_k=similarity_top_k,
+                        use_chat_engine=use_chat_engine,
+                        reset_chat_engine=reset_chat_engine
                     )
-    
-                    for j in list(
-                        pd.Series(list(response.keys()))[
-                            pd.Series(list(response.keys())) != "response"
-                        ]
-                    ):
-                        bot.send_message(message.chat.id, f"{j}: " + response[j])
-            except:
-                bot.reply_to(
-                    message,
-                    "Context too large, try reformulating or shortening your question and asking again.",
-                )
+                    bot.reply_to(message, response["response"])
+        
+                    if "cite your sources" in message.text.lower():
+                        bot.send_message(
+                            message.chat.id, "These are the documents the reply is based on:"
+                        )
+        
+                        for j in list(
+                            pd.Series(list(response.keys()))[
+                                pd.Series(list(response.keys())) != "response"
+                            ]
+                        ):
+                            bot.send_message(message.chat.id, f"{j}: " + response[j])
+                except:
+                    bot.reply_to(
+                        message,
+                        "Context too large, try reformulating or shortening your question and asking again.",
+                    )
 
 
 bot.infinity_polling()
