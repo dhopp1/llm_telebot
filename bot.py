@@ -155,25 +155,31 @@ To reset your chat's short-term memory/context, send a message containing only t
 # bot
 @bot.message_handler(func=lambda msg: True)
 def echo_all(message):
+    global model
+    global which_corpus
+
     # check for clearing out the model
     if message.text.lower() == "clear":
-        global model
-        global which_corpus
-        if which_corpus is not None:
-            model.close_connection()
-        del model.llm
-        del model
-        gc.collect()
+        if 'model' in globals():
+            if which_corpus is not None:
+                model.close_connection()
+            del model.llm
+            del model
+            gc.collect()
+            
+        bot.send_message(
+            message.chat.id,
+            text="Model cleared from memory!",
+        )
         
     # check for reinitialization
     elif "[reinitialize]" in message.text:
         # kill the existing conncection
-        global model
-        global which_corpus
-        if which_corpus is not None:
-            model.close_connection()
-        del model.llm
-        gc.collect()
+        if 'model' in globals():
+            if which_corpus is not None:
+                model.close_connection()
+            del model.llm
+            gc.collect()
 
         # params of the new model
         param_dict = eval(message.text.split("]")[1])
