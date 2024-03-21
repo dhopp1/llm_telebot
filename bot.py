@@ -164,6 +164,8 @@ The options for 'new_corpus' are one of: {list(corpora_dict.name)}', or put None
 To reset your chat's short-term memory/context, send a message containing only the word 'reset'
 
 To upload your own corpus, either upload a single "metadata.csv" file, with at least one column named 'web_filepath' with the web addresses of the .html or .pdf documents, or upload a .zip file that contains a folder named 'corpus' with the .doc, .docx, .txt, or .pdf files inside. You can optionally include a 'metadata.csv' file in the zip file at the same level as the 'corpus' folder, with at least a column named 'filename' with the names of the files.
+
+You can also send a list of web addresses separated by commas, or upload a single .doc, .docx, .pdf, or .txt file
             """,
         )
     else:
