@@ -190,7 +190,14 @@ def echo_all(message):
     
     # upload of own corpus
     if message.document is not None or "https://" in message.text:
-        if True:
+        try:
+            if 'model' in globals():
+                if which_corpus is not None:
+                    model.close_connection()
+                del model.llm
+                del model
+                gc.collect()
+            
             from helper.own_corpus import process_corpus
             
             if message.caption is None:
@@ -210,12 +217,12 @@ def echo_all(message):
                     text="Processing the corpus, this may take a few minutes...",
                 )
                 
-                message_document = message.text if "https://" in message.text else message.document
+                message_document = message.text if message.text is not None else message.document
                 
                 corpora_dict = process_corpus(bot, corpus_name, message_document)
                 
                 model, which_llm, which_corpus = initialize(
-                    which_llm_local=llm_dict.loc[2, "name"], # mistral-docsgpt by default
+                    which_llm_local="mistral-docsgpt", # mistral-docsgpt by default
                     which_corpus_local=corpus_name,
                     n_gpu_layers=n_gpu_layers,
                     temperature=temperature,
@@ -235,7 +242,7 @@ def echo_all(message):
                     message.chat.id,
                     text=f"Successfully created corpus '{corpus_name}', you are chatting with '{which_llm}' contextualized on the '{which_corpus}' corpus. If the corpus name is 'temporary', it will be written over the next time someone uploads a corpus.",
                 )
-        else:
+        except:
             bot.send_message(
                 message.chat.id,
                 text="An error was encountered, there may be an issue with one of your documents or URLs",
