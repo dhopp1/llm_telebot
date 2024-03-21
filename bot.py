@@ -189,7 +189,7 @@ def echo_all(message):
     global corpora_dict
     
     # upload of own corpus
-    if message.document is not None:
+    if message.document is not None or "https://" in message.text:
         if True:
             from helper.own_corpus import process_corpus
             
@@ -210,7 +210,9 @@ def echo_all(message):
                     text="Processing the corpus, this may take a few minutes...",
                 )
                 
-                corpora_dict = process_corpus(bot, corpus_name, message.document)
+                message_document = message.text if "https://" in message.text else message.document
+                
+                corpora_dict = process_corpus(bot, corpus_name, message_document)
                 
                 model, which_llm, which_corpus = initialize(
                     which_llm_local=llm_dict.loc[2, "name"], # mistral-docsgpt by default
